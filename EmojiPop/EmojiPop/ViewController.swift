@@ -59,9 +59,17 @@ class ViewController: UIViewController, ARSKViewDelegate {
         boxNode.verticalAlignmentMode = .center
         boxNode.horizontalAlignmentMode = .center
         boxNode.zPosition = 100
-        boxNode.setScale(1.5)
+        boxNode.setScale(0)
         spawnNode.addChild(boxNode)
         
+        let startSoundAction = SKAction.playSoundFileNamed(
+            "SoundEffects/GameStart.wav",
+            waitForCompletion: false
+        )
+        let scaleInAction = SKAction.scale(to: 1.5, duration: 0.8)
+        boxNode.run(
+            SKAction.sequence([startSoundAction, scaleInAction])
+        )
         return spawnNode
     }
     

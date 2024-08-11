@@ -30,6 +30,15 @@ class Scene: SKScene {
     
     override func update(_ currentTime: TimeInterval) {
         // Called before each frame is rendered
+        if gameState != .Playing { return }
+        if spawnTime == 0 { spawnTime = currentTime + 3 }
+        
+        if spawnTime < currentTime {
+            spawnEmoji()
+            spawnTime = currentTime + 0.5;
+        }
+        
+        updateHUD("SCORE: " + String(score) + " | LIVES: " + String(lives))
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -37,28 +46,14 @@ class Scene: SKScene {
             return
         }
         
-        // Create anchor using the camera's current position
-        if let currentFrame = sceneView.session.currentFrame {
-            
-            // Create a transform with a translation of 0.2 meters in front of the camera
-            var translation = matrix_identity_float4x4
-            translation.columns.3.z = -0.2
-            let transform = simd_mul(currentFrame.camera.transform, translation)
-            
-            // Add a new anchor to the session
-            let anchor = ARAnchor(transform: transform)
-            sceneView.session.add(anchor: anchor)
-        }
-        
         switch gameState {
         case .Init:
             break
         case .TapToStart:
             playGame()
-            addAnchor()
             break
         case .Playing:
-            //checkTouches(touches)
+            checkTouches(touches)
             break
         case .GameOver:
             startGame()
@@ -79,18 +74,20 @@ class Scene: SKScene {
     public func startGame() {
         gameState = .TapToStart
         updateHUD("- TAP TO START -")
+        removeAnchor()
     }
     
     public func playGame() {
         gameState = .Playing
         score = 0
         lives = 10
+        spawnTime = 0
+        addAnchor()
     }
     
     public func stopGame() {
         gameState = .GameOver
         updateHUD("GAME OVER! SCORE: " + String(score))
-        removeAnchor()
     }
     
     func addAnchor() {
@@ -120,5 +117,75 @@ class Scene: SKScene {
             sceneView.session.remove(anchor: anchor!)
         }
     }
+
+    func spawnEmoji() {
+        let emojiNode = SKLabelNode(text:String(emojis.randomElement()!))
+        emojiNode.name = "Emoji"
+        emojiNode.horizontalAlignmentMode = .center
+        emojiNode.verticalAlignmentMode = .center
+        
+        guard let sceneView = self.view as? ARSKView else { return }
+        let spawnNode = sceneView.scene?.childNode(
+            withName: "SpawnPoint")
+        spawnNode?.addChild(emojiNode)
+        
+        // Enable Physics
+        emojiNode.physicsBody = SKPhysicsBody(circleOfRadius: 15)
+        emojiNode.physicsBody?.mass = 0.01
+        
+        // Add Impulse
+        emojiNode.physicsBody?.applyImpulse(
+            CGVector(
+                dx: -5 + 10 * randomCGFloat(),
+                dy: 10
+            )
+        )
+        
+        // Add Torque
+        emojiNode.physicsBody?.applyTorque(-0.2 + 0.4 * randomCGFloat())
+        
+        // Add Sound
+        let spawnSoundAction = SKAction.playSoundFileNamed(
+            "SoundEffects/Spawn.wav", waitForCompletion: false)
+        let dieSoundAction = SKAction.playSoundFileNamed(
+            "SoundEffects/Die.wav", waitForCompletion: false)
+        let waitAction = SKAction.wait(forDuration: 3)
+        let removeAction = SKAction.removeFromParent()
+        
+        let runAction = SKAction.run(
+            {
+                self.lives -= 1
+                if self.lives <= 0 {
+                    self.stopGame()
+                }
+            }
+        )
+        let sequenceAction = SKAction.sequence(
+            [spawnSoundAction, waitAction, dieSoundAction, runAction,
+             removeAction]
+        )
+        emojiNode.run(sequenceAction)
+
+    }
     
+    func randomCGFloat() -> CGFloat {
+        return CGFloat(Float(arc4random()) / Float(UINT32_MAX))
+    }
+    
+    func checkTouches(_ touches: Set<UITouch>) {
+        // raycast into scene
+        guard let touch = touches.first else { return }
+        let touchLocation = touch.location(in: self)
+        let touchedNode = self.atPoint(touchLocation)
+
+        if touchedNode.name != "Emoji" { return }
+        score += 1
+        
+        let collectSoundAction = SKAction.playSoundFileNamed(
+            "SoundEffects/Collect.wav", waitForCompletion: false)
+        let removeAction = SKAction.removeFromParent()
+        let sequenceAction = SKAction.sequence(
+            [collectSoundAction, removeAction])
+        touchedNode.run(sequenceAction)
+    }
 }
